@@ -3,6 +3,7 @@ package com.jldubz.gistaviewer.viewmodel;
 import android.view.View;
 
 import com.jldubz.gistaviewer.model.Constants;
+import com.jldubz.gistaviewer.model.data.IGithibService;
 import com.jldubz.gistaviewer.model.gists.Gist;
 import com.jldubz.gistaviewer.model.GitHubUser;
 
@@ -11,6 +12,8 @@ import java.util.List;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
+
+import retrofit2.Response;
 
 /**
  * ViewModel that handles business logic for Gist fragments DiscoverGistsFragment, StarGistsFragment, and YourGistsFragment and
@@ -45,6 +48,9 @@ public class MainViewModel extends ViewModel {
     private boolean mMoreYourGistsAvailable = true;
     private boolean mMoreStarredGistsAvailable = true;
     private boolean mIsLoggedIn;
+
+    private IGithibService mGithibService;
+
 
     public MainViewModel() {
         super();
