@@ -4,15 +4,18 @@ import com.jldubz.gistaviewer.model.gists.Gist;
 
 import java.util.List;
 
+
+import retrofit2.Call;
 import retrofit2.http.GET;
 
-public interface IGithibService {
+public interface IGithubService {
 
-    @GET("/gists/public") //https://api.github.com/gist
-    call<List<Gist>> getpublicGists();
+    @GET("/gists/public") //https://api.github.com/gist/public
+    Call<List<Gist>> getpublicGists();
 
     @GET("/gists")
-    call<List<Gist>> getyourGists();
+    Call<List<Gist>> getyourGists();
 
-    call<List<Gist>> getstarredGists();
+    @GET("/gists/starred")
+    Call<List<Gist>> getstarredGists();
 }
