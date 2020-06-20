@@ -2,20 +2,23 @@ package com.jldubz.gistaviewer.viewmodel;
 
 import android.view.View;
 
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.MutableLiveData;
+import androidx.lifecycle.ViewModel;
+
 import com.jldubz.gistaviewer.model.Constants;
+import com.jldubz.gistaviewer.model.data.BasicAuthInterceptor;
+//import com.jldubz.gistaviewer.model.data.IGitHubService;
 import com.jldubz.gistaviewer.model.data.IGithubService;
 import com.jldubz.gistaviewer.model.gists.Gist;
 import com.jldubz.gistaviewer.model.gists.GistComment;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-import androidx.lifecycle.LiveData;
-import androidx.lifecycle.MutableLiveData;
-import androidx.lifecycle.ViewModel;
-
+import okhttp3.OkHttpClient;
+import okhttp3.ResponseBody;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -42,7 +45,7 @@ public class GistViewModel extends ViewModel {
     private String mGistId;
     private int mGistCommentPrevPage;
 
-    private IGithubService mGithubService;
+    private IGithubService mGitHubService;
 
     public GistViewModel() {
         super();
@@ -69,13 +72,14 @@ public class GistViewModel extends ViewModel {
      * Configure a new Retrofit instance for future API calls with no authorization
      */
     private void initAnonService() {
-        Retrofit retrofit = new Retrofit.Builder().baseUrl(Constants.URL_GITHUB)
+
+        Retrofit retrofit = new Retrofit.Builder().baseUrl(Constants.URL_GITHUB) //https://api.github.com
                 .addConverterFactory(GsonConverterFactory.create())
                 .build();
 
-        mGithubService = retrofit.create(IGithubService.class);
-    }
 
+        mGitHubService = retrofit.create(IGithubService.class);
+    }
 
     /**
      * Set the credentials to use for authorization when communicating with the GitHub API for
@@ -93,6 +97,17 @@ public class GistViewModel extends ViewModel {
         //Store the username and token for later
         mUsername = username;
         mToken = token;
+
+        OkHttpClient client = new OkHttpClient.Builder()
+                .addInterceptor(new BasicAuthInterceptor(mUsername, mToken))
+                .build();
+
+        Retrofit retrofit = new Retrofit.Builder().baseUrl(Constants.URL_GITHUB) //https://api.github.com
+                .addConverterFactory(GsonConverterFactory.create())
+                .client(client)
+                .build();
+
+        mGitHubService = retrofit.create(IGithubService.class);
 
 
     }
@@ -143,18 +158,19 @@ public class GistViewModel extends ViewModel {
 
         //Show the progress bar
         mProgressBarVisibility.postValue(View.VISIBLE);
-        mGithubService.getGistById(mGistId).enqueue(new Callback<Gist>() {
+        mGitHubService.getGistById(mGistId).enqueue(new Callback<Gist>() {
             @Override
             public void onResponse(Call<Gist> call, Response<Gist> response) {
                 mProgressBarVisibility.postValue(View.GONE);
-                if (!response.isSuccessful()){
+                if (!response.isSuccessful()) {
                     showError(NetworkUtil.onGitHubResponseError(response));
                     return;
                 }
+
                 mGist.postValue(response.body());
+
                 loadCommentPageCount();
                 getGistStar();
-
             }
 
             @Override
@@ -162,7 +178,6 @@ public class GistViewModel extends ViewModel {
                 showError(t.getLocalizedMessage());
             }
         });
-
 
     }
 
@@ -207,6 +222,27 @@ public class GistViewModel extends ViewModel {
             return;
         }
 
+        mGitHubService.getGistStarById(mGistId).enqueue(new Callback<ResponseBody>() {
+            @Override
+            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+
+                if (response.code() == 404) {
+                    mIsGistStarred.postValue(false);
+                    return;
+                }
+                else if (response.code() == 204) {
+                    mIsGistStarred.postValue(true);
+                    return;
+                }
+
+                showError(NetworkUtil.onGitHubResponseError(response));
+            }
+
+            @Override
+            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                showError(t.getLocalizedMessage());
+            }
+        });
 
     }
 
@@ -221,7 +257,22 @@ public class GistViewModel extends ViewModel {
             return;
         }
 
+        mGitHubService.starGistById(mGistId).enqueue(new Callback<ResponseBody>() {
+            @Override
+            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                if (response.code() == 204) {
+                    mIsGistStarred.postValue(true);
+                    return;
+                }
 
+                showError(NetworkUtil.onGitHubResponseError(response));
+            }
+
+            @Override
+            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                showError(t.getLocalizedMessage());
+            }
+        });
     }
 
     /**
@@ -235,7 +286,22 @@ public class GistViewModel extends ViewModel {
             return;
         }
 
+        mGitHubService.unstarGistById(mGistId).enqueue(new Callback<ResponseBody>() {
+            @Override
+            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                if (response.code() == 204) {
+                    mIsGistStarred.postValue(false);
+                    return;
+                }
 
+                showError(NetworkUtil.onGitHubResponseError(response));
+            }
+
+            @Override
+            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                showError(t.getLocalizedMessage());
+            }
+        });
     }
 
     //endregion
@@ -261,9 +327,10 @@ public class GistViewModel extends ViewModel {
 
         //Show the progress bar in the comments section
         mCommentsProgressBarVisibility.postValue(View.VISIBLE);
-        mGithubService.getGistCommentsById(mGistId, mGistCommentPrevPage).enqueue(new Callback<List<GistComment>>() {
+        mGitHubService.getGistCommentsById(mGistId, mGistCommentPrevPage).enqueue(new Callback<List<GistComment>>() {
             @Override
             public void onResponse(Call<List<GistComment>> call, Response<List<GistComment>> response) {
+
                 mCommentsProgressBarVisibility.postValue(View.GONE);
                 if (!response.isSuccessful()) {
                     showError(NetworkUtil.onGitHubResponseError(response));
@@ -274,23 +341,20 @@ public class GistViewModel extends ViewModel {
                 List<GistComment> currentList = mComments.getValue();
                 if (currentList == null) {
                     currentList = new ArrayList<>();
-
                 }
 
-                if (response.body() != null){
-                    List<GistComment>  comments = new ArrayList<>(response.body());
+                if (response.body() != null) {
+                    List<GistComment> comments = new ArrayList<>(response.body());
                     Collections.reverse(comments);
                     currentList.addAll(comments);
                 }
 
                 mComments.postValue(currentList);
-
             }
 
             @Override
             public void onFailure(Call<List<GistComment>> call, Throwable t) {
                 showError(t.getLocalizedMessage());
-
             }
         });
 
@@ -322,7 +386,34 @@ public class GistViewModel extends ViewModel {
             return;
         }
 
+        GistComment newGistComment = new GistComment();
+        newGistComment.setBody(comment);
 
+        mGitHubService.createCommentOnGist(mGistId, newGistComment).enqueue(new Callback<GistComment>() {
+            @Override
+            public void onResponse(Call<GistComment> call, Response<GistComment> response) {
+                if (!response.isSuccessful()) {
+                    showError(NetworkUtil.onGitHubResponseError(response));
+                    return;
+                }
+
+                List<GistComment> currentList = mComments.getValue();
+                if (currentList == null) {
+                    currentList = new ArrayList<>();
+                }
+
+                List<GistComment> comments = new ArrayList<>(currentList);
+
+                comments.add(0, response.body());
+
+                mComments.postValue(comments);
+            }
+
+            @Override
+            public void onFailure(Call<GistComment> call, Throwable t) {
+                showError(t.getLocalizedMessage());
+            }
+        });
 
     }
 
@@ -338,7 +429,7 @@ public class GistViewModel extends ViewModel {
 
         //Show the progress bar in the comments section
         mCommentsProgressBarVisibility.postValue(View.VISIBLE);
-        mGithubService.getGistCommentsHeaderById(mGistId).enqueue(new Callback<Void>() {
+        mGitHubService.getGistCommentHeadersById(mGistId).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (!response.isSuccessful()) {
@@ -349,18 +440,17 @@ public class GistViewModel extends ViewModel {
                 String linkHeader = response.headers().get("Link");
                 if (linkHeader != null) {
                     mGistCommentPrevPage = getLastPageNum(linkHeader);
-
-                }else {
+                }
+                else {
                     mGistCommentPrevPage = 0;
                 }
-                loadMoreComments();
 
+                loadMoreComments();
             }
 
             @Override
             public void onFailure(Call<Void> call, Throwable t) {
                 showError(t.getLocalizedMessage());
-
             }
         });
 
